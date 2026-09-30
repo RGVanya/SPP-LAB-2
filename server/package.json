@@ -1,0 +1,17 @@
+{
+  "name": "task-manager-api",
+  "version": "1.0.0",
+  "description": "REST API менеджера задач: Express, PostgreSQL, вложения",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1",
+    "express-validator": "^7.3.2",
+    "morgan": "^1.12.1",
+    "multer": "^2.2.0",
+    "pg": "^8.16.3"
+  }
+}
