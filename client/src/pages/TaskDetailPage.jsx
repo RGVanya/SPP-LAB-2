@@ -5,16 +5,46 @@ import { ErrorBanner, NoticeBanner } from '../components/Banners';
 import { StatusBadge } from '../components/StatusBadge';
 import { formatDate, formatDateTime, formatFileSize } from '../format';
 
+function fileIcon(mimeType = '') {
+  if (mimeType.startsWith('image/'))                                   return '🖼';
+  if (mimeType.startsWith('video/'))                                   return '🎬';
+  if (mimeType.startsWith('audio/'))                                   return '🎵';
+  if (mimeType.includes('pdf'))                                        return '📄';
+  if (mimeType.includes('zip') || mimeType.includes('archive'))        return '🗜';
+  if (mimeType.includes('word') || mimeType.includes('document'))      return '📝';
+  if (mimeType.includes('sheet') || mimeType.includes('excel'))        return '📊';
+  if (mimeType.includes('presentation') || mimeType.includes('power')) return '📽';
+  if (mimeType.startsWith('text/'))                                    return '📃';
+  return '📎';
+}
+
+function getDueSeverity(dueDate) {
+  if (!dueDate) return 'none';
+  const due = new Date(dueDate);
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  if (due < now) return 'overdue';
+  const soon = new Date(now); soon.setDate(soon.getDate() + 3);
+  if (due <= soon) return 'soon';
+  return 'ok';
+}
+
+const DUE_LABEL = {
+  none:    null,
+  ok:      '📅',
+  soon:    '⏰ Скоро срок:',
+  overdue: '⚠ Просрочена:',
+};
+
 export function TaskDetailPage() {
   const api = useApi();
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const [task, setTask] = useState(null);
+  const [task, setTask]       = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(location.state?.message || '');
-  const [file, setFile] = useState(null);
+  const [error, setError]     = useState(null);
+  const [notice, setNotice]   = useState(location.state?.message || '');
+  const [file, setFile]       = useState(null);
   const [uploading, setUploading] = useState(false);
   const [pending, setPending] = useState(false);
 
@@ -22,18 +52,10 @@ export function TaskDetailPage() {
     let active = true;
     setLoading(true);
     api.get(id)
-      .then((data) => {
-        if (active) setTask(data.task);
-      })
-      .catch((requestError) => {
-        if (active) setError(requestError);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
+      .then((data) => { if (active) setTask(data.task); })
+      .catch((err)  => { if (active) setError(err); })
+      .finally(()   => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [api, id]);
 
   async function reload() {
@@ -51,8 +73,8 @@ export function TaskDetailPage() {
       event.target.reset();
       await reload();
       setNotice('Файл прикреплён');
-    } catch (requestError) {
-      setError(requestError);
+    } catch (err) {
+      setError(err);
     } finally {
       setUploading(false);
     }
@@ -62,8 +84,8 @@ export function TaskDetailPage() {
     setError(null);
     try {
       await api.download(task.id, attachment.id, attachment.originalName);
-    } catch (requestError) {
-      setError(requestError);
+    } catch (err) {
+      setError(err);
     }
   }
 
@@ -74,8 +96,8 @@ export function TaskDetailPage() {
       await api.removeAttachment(id, attachmentId);
       await reload();
       setNotice('Вложение удалено');
-    } catch (requestError) {
-      setError(requestError);
+    } catch (err) {
+      setError(err);
     } finally {
       setPending(false);
     }
@@ -88,96 +110,158 @@ export function TaskDetailPage() {
     try {
       await api.remove(id);
       navigate('/', { state: { message: `Задача «${task.title}» удалена` } });
-    } catch (requestError) {
-      setError(requestError);
+    } catch (err) {
+      setError(err);
       setPending(false);
     }
   }
 
-  if (loading) return <p className="muted">Загрузка…</p>;
+  if (loading) {
+    return (
+      <section>
+        <Link className="back-link" to="/">← К списку</Link>
+        <div className="skeleton-list">
+          {[1, 2].map((n) => <div key={n} className="skeleton-card" style={{ height: 120 }} />)}
+        </div>
+      </section>
+    );
+  }
 
   if (error?.status === 404 && !task) {
     return (
       <section>
+        <Link className="back-link" to="/">← К списку</Link>
         <ErrorBanner error={error} />
-        <Link className="button" to="/">К списку</Link>
       </section>
     );
   }
 
   if (!task) {
-    return (
-      <section>
-        <ErrorBanner error={error} />
-      </section>
-    );
+    return <section><ErrorBanner error={error} /></section>;
   }
+
+  const severity = getDueSeverity(task.dueDate);
 
   return (
     <section>
-      <Link className="back-link" to="/">К списку</Link>
+      <Link className="back-link" to="/">← К списку</Link>
       <NoticeBanner message={notice} />
       <ErrorBanner error={error} />
 
-      <article className="card detail">
-        <div className="detail-head">
-          <h1>{task.title}</h1>
-          <StatusBadge status={task.status} />
+      {/* ── Task card ── */}
+      <article className="card" style={{ marginBottom: 18 }}>
+        <div className="detail-header">
+          <div className="detail-title">
+            <h1 style={{ marginBottom: 6 }}>{task.title}</h1>
+            <StatusBadge status={task.status} />
+          </div>
         </div>
-        {task.description ? <p>{task.description}</p> : <p className="muted">Без описания</p>}
-        <p className="meta">Срок: {formatDate(task.dueDate)}</p>
+
+        <div className="detail-meta">
+          {task.dueDate && (
+            <div className={`detail-meta-row due-tag--${severity}`}>
+              <span className="meta-icon">{DUE_LABEL[severity]}</span>
+              <span>{formatDate(task.dueDate)}</span>
+            </div>
+          )}
+          <div className="detail-meta-row">
+            <span className="meta-icon">🕐</span>
+            <span>Создана {formatDateTime(task.createdAt)}</span>
+          </div>
+          {task.createdAt !== task.updatedAt && (
+            <div className="detail-meta-row">
+              <span className="meta-icon">✏</span>
+              <span>Изменена {formatDateTime(task.updatedAt)}</span>
+            </div>
+          )}
+        </div>
+
+        {task.description
+          ? <div className="detail-description">{task.description}</div>
+          : <p className="no-description">Описание не указано</p>}
+
         <div className="form-actions">
-          <Link className="button button-primary" to={`/tasks/${task.id}/edit`}>Изменить</Link>
-          <button className="button button-danger" type="button" disabled={pending} onClick={onDeleteTask}>
-            Удалить
+          <Link className="button button-primary" to={`/tasks/${task.id}/edit`}>
+            ✏ Изменить
+          </Link>
+          <div className="form-actions-spacer" />
+          <button
+            className="button button-danger"
+            type="button"
+            disabled={pending}
+            onClick={onDeleteTask}
+          >
+            {pending ? 'Удаление…' : '✕ Удалить задачу'}
           </button>
         </div>
       </article>
 
+      {/* ── Attachments ── */}
       <section className="card">
-        <h2>Вложения</h2>
-        {task.attachments.length === 0 && <p className="muted">Файлов пока нет.</p>}
-        <ul className="attachment-list">
-          {task.attachments.map((attachment) => (
-            <li key={attachment.id}>
-              <div>
-                <button
-                  className="link-button"
-                  type="button"
-                  onClick={() => onDownload(attachment)}
-                >
-                  {attachment.originalName}
-                </button>
-                <p className="meta">
-                  {formatFileSize(attachment.size)} · {formatDateTime(attachment.uploadedAt)}
-                </p>
-              </div>
-              <button
-                className="button button-danger"
-                type="button"
-                disabled={pending}
-                onClick={() => onDeleteAttachment(attachment.id)}
-              >
-                Удалить
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="section-head">
+          <h2>Вложения</h2>
+          {task.attachments.length > 0 && (
+            <span className="attach-count-badge">{task.attachments.length}</span>
+          )}
+        </div>
 
-        <form className="upload-form" onSubmit={onUpload}>
-          <label className="field">
-            <span>Файл</span>
-            <input
-              type="file"
-              name="file"
-              onChange={(event) => setFile(event.target.files?.[0] || null)}
-            />
-            {error?.fields?.file && <span className="field-error">{error.fields.file}</span>}
-          </label>
-          <button className="button" type="submit" disabled={uploading || pending}>
-            {uploading ? 'Загрузка…' : 'Прикрепить'}
-          </button>
-        </form>
+        {task.attachments.length === 0
+          ? <p className="muted">Файлов пока нет.</p>
+          : (
+            <ul className="attachment-list">
+              {task.attachments.map((att) => (
+                <li key={att.id} className="attachment-item">
+                  <span className="file-icon">{fileIcon(att.mimeType)}</span>
+                  <div className="attachment-info">
+                    <button
+                      className="attachment-name"
+                      type="button"
+                      title="Скачать файл"
+                      onClick={() => onDownload(att)}
+                    >
+                      {att.originalName}
+                    </button>
+                    <p className="attachment-meta">
+                      {formatFileSize(att.size)} · {formatDateTime(att.uploadedAt)}
+                    </p>
+                  </div>
+                  <button
+                    className="button button-sm button-danger"
+                    type="button"
+                    disabled={pending}
+                    title="Удалить вложение"
+                    onClick={() => onDeleteAttachment(att.id)}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+
+        <div className="upload-zone">
+          <form className="upload-row" onSubmit={onUpload}>
+            <label className="field">
+              <span>Прикрепить файл (до 10 МБ)</span>
+              <input
+                type="file"
+                name="file"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+              />
+              {error?.fields?.file && (
+                <span className="field-error">⚠ {error.fields.file}</span>
+              )}
+            </label>
+            <button
+              className="button button-primary"
+              type="submit"
+              disabled={uploading || pending}
+            >
+              {uploading ? 'Загрузка…' : '↑ Прикрепить'}
+            </button>
+          </form>
+        </div>
       </section>
     </section>
   );

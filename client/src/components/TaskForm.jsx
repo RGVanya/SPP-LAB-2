@@ -8,6 +8,9 @@ const EMPTY_FORM = {
   dueDate: '',
 };
 
+const TITLE_MAX = 200;
+const DESC_MAX  = 2000;
+
 export function TaskForm({ initial, pending, error, onSubmit, submitLabel }) {
   const [form, setForm] = useState({ ...EMPTY_FORM, ...initial });
   const fields = error?.fields || {};
@@ -26,31 +29,48 @@ export function TaskForm({ initial, pending, error, onSubmit, submitLabel }) {
     onSubmit(form);
   }
 
+  const titleLeft = TITLE_MAX - (form.title?.length || 0);
+  const descLeft  = DESC_MAX  - (form.description?.length || 0);
+
   return (
-    <form className="card form" onSubmit={handleSubmit} noValidate>
+    <form className="form-card" onSubmit={handleSubmit} noValidate>
+
       <label className="field">
-        <span>Название</span>
+        <div className="field-header">
+          <span>Название</span>
+          <span className={`char-count${titleLeft <= 30 ? ' char-count--warn' : ''}`}>
+            {titleLeft}
+          </span>
+        </div>
         <input
           name="title"
           value={form.title}
           onChange={update}
-          maxLength={200}
+          maxLength={TITLE_MAX}
+          placeholder="Введите название задачи"
           aria-invalid={Boolean(fields.title)}
+          autoFocus
         />
-        {fields.title && <span className="field-error">{fields.title}</span>}
+        {fields.title && <span className="field-error">⚠ {fields.title}</span>}
       </label>
 
       <label className="field">
-        <span>Описание</span>
+        <div className="field-header">
+          <span>Описание</span>
+          <span className={`char-count${descLeft <= 200 ? ' char-count--warn' : ''}`}>
+            {descLeft}
+          </span>
+        </div>
         <textarea
           name="description"
           value={form.description}
           onChange={update}
           rows={5}
-          maxLength={2000}
+          maxLength={DESC_MAX}
+          placeholder="Опишите задачу подробнее (необязательно)"
           aria-invalid={Boolean(fields.description)}
         />
-        {fields.description && <span className="field-error">{fields.description}</span>}
+        {fields.description && <span className="field-error">⚠ {fields.description}</span>}
       </label>
 
       <div className="form-row">
@@ -66,11 +86,11 @@ export function TaskForm({ initial, pending, error, onSubmit, submitLabel }) {
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
-          {fields.status && <span className="field-error">{fields.status}</span>}
+          {fields.status && <span className="field-error">⚠ {fields.status}</span>}
         </label>
 
         <label className="field">
-          <span>Срок</span>
+          <span>Срок выполнения</span>
           <input
             type="date"
             name="dueDate"
@@ -78,11 +98,18 @@ export function TaskForm({ initial, pending, error, onSubmit, submitLabel }) {
             onChange={update}
             aria-invalid={Boolean(fields.dueDate)}
           />
-          {fields.dueDate && <span className="field-error">{fields.dueDate}</span>}
+          {fields.dueDate && <span className="field-error">⚠ {fields.dueDate}</span>}
         </label>
       </div>
 
-      <div className="form-actions">
+      {error && !error.fields && (
+        <div className="banner banner-error" style={{ margin: 0 }}>
+          <span className="banner-icon">⚠</span>
+          {error.message}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         <button className="button button-primary" type="submit" disabled={pending}>
           {pending ? 'Сохранение…' : submitLabel}
         </button>
